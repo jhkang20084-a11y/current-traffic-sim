@@ -1,0 +1,538 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>전류 교통체증 시뮬레이션</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f4f6fa; --card:#ffffff; --ink:#1d2433; --muted:#5b6578; --line:#e1e6ef;
+    --accent:#2f6fec; --accent-soft:#e6efff; --warn:#e8590c; --good:#2b9348;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{ --bg:#11151d; --card:#1a202b; --ink:#e8ecf3; --muted:#9aa5b8; --line:#2c3443;
+      --accent:#6f9cff; --accent-soft:#22304d; --warn:#ff8a4c; --good:#5fd38a; }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:"Noto Sans KR",system-ui,sans-serif;line-height:1.55}
+  .wrap{max-width:1000px;margin:0 auto;padding:20px 16px 48px}
+  h1{font-size:1.6rem;margin:4px 0 2px;font-weight:800}
+  .sub{color:var(--muted);margin:0 0 16px}
+  .tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+  .tab{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:9px 14px;border-radius:999px;cursor:pointer;font:inherit;font-weight:600}
+  .tab.on{background:var(--accent);border-color:var(--accent);color:#fff}
+  .controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 14px;margin-bottom:14px}
+  .controls label{font-weight:600;font-size:.92rem}
+  .seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;vertical-align:middle}
+  .seg button{border:0;background:transparent;color:var(--ink);padding:6px 11px;font:inherit;font-size:.9rem;cursor:pointer}
+  .seg button+button{border-left:1px solid var(--line)}
+  .seg button.on{background:var(--accent-soft);color:var(--accent);font-weight:700}
+  .btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;padding:6px 12px;font:inherit;font-size:.9rem;cursor:pointer}
+  .panel{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:12px 12px 10px;margin-bottom:14px}
+  .panel h3{margin:2px 4px 8px;font-size:1.08rem}
+  .panel h3 small{color:var(--muted);font-weight:400;font-size:.88rem;margin-left:6px}
+  canvas{display:block;width:100%;border-radius:10px}
+  .stats{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-top:10px}
+  .stat{background:var(--bg);border-radius:10px;padding:8px 10px}
+  .stat .k{font-size:.78rem;color:var(--muted)}
+  .stat .v{font-size:1.15rem;font-weight:800}
+  .stat.big .v{font-size:1.45rem;color:var(--accent)}
+  .bar{height:8px;background:var(--line);border-radius:6px;overflow:hidden;margin-top:4px}
+  .bar i{display:block;height:100%;background:var(--accent);width:0;transition:width .4s}
+  .explain{background:var(--accent-soft);border-radius:14px;padding:12px 16px;margin:4px 0 18px}
+  .explain b{color:var(--accent)}
+  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+  th,td{padding:9px 12px;border-bottom:1px solid var(--line);text-align:left;font-size:.95rem;vertical-align:top}
+  th{background:var(--accent-soft)}
+  tr:last-child td{border-bottom:0}
+  h2{font-size:1.2rem;margin:26px 0 10px}
+  .note{color:var(--muted);font-size:.92rem}
+  .note li{margin-bottom:4px}
+  @media (max-width:640px){
+    .stats{grid-template-columns:1fr 1fr}
+    .stat.big{grid-column:1/-1}
+    h1{font-size:1.3rem}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🚗⚡ 전류는 교통 흐름이다</h1>
+  <p class="sub">자동차 = 전하, 1초 동안 계수기를 지나가는 자동차 수 = 전류. 전선은 넓은 5차선 도로, 니크롬선(저항)은 좁은 1차선 터널입니다.</p>
+
+  <div class="tabs" id="tabs">
+    <button class="tab on" data-tab="len">① 니크롬선 길이 비교</button>
+    <button class="tab" data-tab="conn">② 직렬 vs 병렬</button>
+    <button class="tab" data-tab="free">③ 자유 실험</button>
+  </div>
+
+  <div class="controls">
+    <span><label>전지 개수(전압)</label>
+      <span class="seg" id="volt"><button data-v="1" class="on">1개</button><button data-v="2">2개</button><button data-v="3">3개</button></span></span>
+    <span><label>재생 속도</label>
+      <span class="seg" id="speed"><button data-v="0.5">0.5×</button><button data-v="1" class="on">1×</button><button data-v="2">2×</button></span></span>
+    <button class="btn" id="pause">⏸ 일시정지</button>
+    <button class="btn" id="reset">↺ 처음부터</button>
+  </div>
+
+  <section data-sec="len">
+    <div id="lenPanels"></div>
+    <div class="explain">
+      <b>긴 니크롬선 = 긴 1차선 터널.</b> 터널이 길수록 차들이 한 줄로 천천히 빠져나가는 시간이 길어져 터널 입구에 정체가 길게 생깁니다.
+      그 결과 도로 어디에서 세어도 <b>1초 동안 지나가는 차의 수(전류)가 줄어듭니다.</b> → 저항은 길이에 비례하고, 저항이 크면 전류가 작다.
+    </div>
+  </section>
+
+  <section data-sec="conn" hidden>
+    <div id="connPanels"></div>
+    <div class="explain">
+      <b>직렬 = 터널 두 개가 한 줄로 이어짐.</b> 모든 차가 터널을 두 번 지나야 하므로 정체가 심해지고 전류가 작아집니다 (전체 저항 ↑).<br>
+      <b>병렬 = 터널이 두 줄로 나란히.</b> 차들이 두 터널로 나누어 지나가므로 정체가 줄고 전류가 커집니다 (전체 저항 ↓).
+      병렬에서 각 터널을 지나는 차의 수를 더하면 계수기(전류계)에서 센 값과 같습니다.
+    </div>
+  </section>
+
+  <section data-sec="free" hidden>
+    <div class="controls">
+      <span><label>연결 방식</label>
+        <span class="seg" id="fConn"><button data-v="single" class="on">터널 1개</button><button data-v="series">직렬</button><button data-v="parallel">병렬</button></span></span>
+      <span><label>니크롬선 길이</label>
+        <span class="seg" id="fLen"><button data-v="short" class="on">짧은 터널</button><button data-v="long">긴 터널</button></span></span>
+    </div>
+    <div id="freePanels"></div>
+  </section>
+
+  <h2>🔁 비유 정리</h2>
+  <table>
+    <tr><th>전기</th><th>교통</th></tr>
+    <tr><td>전하(전자)</td><td>자동차</td></tr>
+    <tr><td>전류 = 단위 시간 동안 단면을 지나는 전하량</td><td>1초 동안 계수기를 지나가는 자동차 수 (차가 빠르게 흐르면 전류가 크다)</td></tr>
+    <tr><td>전류계</td><td>도로 위 차량 계수기</td></tr>
+    <tr><td>전선</td><td>넓은 5차선 도로 (거의 막히지 않음)</td></tr>
+    <tr><td>저항(니크롬선)</td><td>1차선 터널 — 차가 한 줄로 천천히 지나감</td></tr>
+    <tr><td>긴 니크롬선 / 짧은 니크롬선</td><td>긴 터널(정체 심함) / 짧은 터널(정체 덜함)</td></tr>
+    <tr><td>직렬연결</td><td>터널 두 개를 한 줄로 연달아 통과</td></tr>
+    <tr><td>병렬연결</td><td>터널 두 개가 나란히 — 길이 두 갈래로 나뉨</td></tr>
+    <tr><td>전압(전지)</td><td>차를 앞으로 밀어주는 힘 — 전지를 늘리면 모든 차가 더 빨리 움직임</td></tr>
+  </table>
+
+  <h2>⚠️ 비유의 한계 (선생님 참고)</h2>
+  <ul class="note">
+    <li>실제 회로에서 전하는 사라지거나 생겨나지 않습니다. 시뮬레이션에서도 자동차 수는 처음부터 끝까지 그대로입니다.</li>
+    <li>자동차 진행 방향은 <b>전류의 방향</b>(+극 → 도선 → −극)입니다. 실제 전자는 반대 방향으로 움직입니다.</li>
+    <li>실제 도선 속 전자는 매우 느리게 이동하지만, 전기 신호는 회로 전체에 거의 동시에 전달됩니다. 그래서 실제 회로에서는 시뮬레이션처럼 "입구에만 줄이 길게" 생기지는 않고, 회로 전체의 흐름이 함께 느려집니다.</li>
+    <li>터널(저항)에서 차들이 비비며 지나가는 것처럼, 니크롬선에서는 전기 에너지가 열로 바뀝니다.</li>
+  </ul>
+</div>
+
+<script>
+const W = 900, H = 370;
+const LOFF = [-14, -7, 0, 7, 14];      // 5차선 각 차로의 가로 위치
+const CARL = 11;                        // 차 길이 + 최소 간격
+const SP = 14;                          // 터널 안 차 간격
+const K = 4;                            // 전압 1, 저항 1일 때 1초당 차 수
+const ACC = 260;
+const N_CARS = 150;
+const COLORS = ['#e63946','#f4a261','#2a9d8f','#457b9d','#9b5de5','#f15bb5','#00b4d8','#ffb703','#06d6a0','#ef476f'];
+
+const state = { volt: 1, speed: 1, paused: false, tab: 'len', ready: false };
+
+function buildPath(pts, r) {
+  const raw = [pts[0]];
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [px, py] = pts[i-1], [cx, cy] = pts[i], [nx, ny] = pts[i+1];
+    const d1 = Math.hypot(cx-px, cy-py), d2 = Math.hypot(nx-cx, ny-cy);
+    const rr = Math.min(r, d1/2, d2/2);
+    const ax = cx-(cx-px)/d1*rr, ay = cy-(cy-py)/d1*rr, bx = cx+(nx-cx)/d2*rr, by = cy+(ny-cy)/d2*rr;
+    for (let k = 0; k <= 16; k++) {
+      const t = k/16, u = 1-t;
+      raw.push([u*u*ax + 2*u*t*cx + t*t*bx, u*u*ay + 2*u*t*cy + t*t*by]);
+    }
+  }
+  raw.push(pts[pts.length-1]);
+  // 1px 간격으로 다시 샘플링
+  const xs = [raw[0][0]], ys = [raw[0][1]];
+  let acc = 0, need = 1;
+  for (let i = 1; i < raw.length; i++) {
+    const [x0, y0] = raw[i-1], [x1, y1] = raw[i];
+    const seg = Math.hypot(x1-x0, y1-y0);
+    if (!seg) continue;
+    while (acc + seg >= need) {
+      const t = (need-acc)/seg;
+      xs.push(x0 + (x1-x0)*t); ys.push(y0 + (y1-y0)*t); need++;
+    }
+    acc += seg;
+  }
+  const n = xs.length, an = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = Math.max(0, i-2), b = Math.min(n-1, i+2);
+    an[i] = Math.atan2(ys[b]-ys[a], xs[b]-xs[a]);
+  }
+  return { xs, ys, an, len: n-1 };
+}
+
+function pt(path, s, off) {
+  const i = Math.max(0, Math.min(path.len, Math.round(s)));
+  const a = path.an[i];
+  return [path.xs[i] - Math.sin(a)*off, path.ys[i] + Math.cos(a)*off, a];
+}
+
+function strokeAlong(ctx, path, s0, s1, off) {
+  ctx.beginPath();
+  for (let s = s0; ; s += 3) {
+    const ss = Math.min(s, s1), [x, y] = pt(path, ss, off);
+    ss === s0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    if (ss >= s1) break;
+  }
+  ctx.stroke();
+}
+
+class Sim {
+  constructor(host, title, cfg, fixed) {
+    this.cfg = { ...cfg };
+    this.fixed = fixed;
+    const el = document.createElement('div');
+    el.className = 'panel';
+    el.innerHTML = `<h3></h3><canvas></canvas>
+      <div class="stats">
+        <div class="stat big"><div class="k">전류 = 1초 동안 계수기를 지나는 차</div><div class="v" data-s="i">-</div><div class="bar"><i></i></div></div>
+        <div class="stat"><div class="k">전체 저항 (짧은 터널=1)</div><div class="v" data-s="r">-</div></div>
+        <div class="stat"><div class="k">평균 속력</div><div class="v" data-s="v">-</div></div>
+        <div class="stat"><div class="k">막혀서 멈춘 차</div><div class="v" data-s="j">-</div></div>
+      </div>`;
+    host.appendChild(el);
+    this.el = el;
+    this.titleEl = el.querySelector('h3');
+    this.canvas = el.querySelector('canvas');
+    this.ctx = this.canvas.getContext('2d');
+    this.out = {};
+    el.querySelectorAll('[data-s]').forEach(n => this.out[n.dataset.s] = n);
+    this.barEl = el.querySelector('.bar i');
+    this.setTitle(title);
+    this.build();
+    this.resize();
+  }
+
+  setTitle(t) { this.titleEl.innerHTML = t; }
+
+  build() {
+    const c = this.cfg;
+    this.paths = [buildPath([[730,120],[850,120],[850,320],[50,320],[50,120],[170,120]], 34)];
+    if (c.conn === 'parallel') {
+      this.paths.push(buildPath([[170,120],[230,50],[670,50],[730,120]], 34));
+      this.paths.push(buildPath([[170,120],[230,190],[670,190],[730,120]], 34));
+    } else {
+      this.paths.push(buildPath([[170,120],[730,120]], 0));
+    }
+    const TL = c.len === 'long' ? 200 : 100;
+    this.tunnels = [];
+    for (let p = 1; p < this.paths.length; p++) {
+      const L = this.paths[p].len;
+      const add = (s0, s1) => this.tunnels.push({ p, s0, s1, acc: 1, times: [] });
+      if (c.conn === 'series') {
+        const st = (L - (2*TL + 60)) / 2;
+        add(st, st+TL); add(st+TL+60, st+2*TL+60);
+      } else add((L-TL)/2, (L+TL)/2);
+    }
+    // 계수기 위치: 아래쪽 도로 x=680
+    const P0 = this.paths[0];
+    let best = 0, bd = 1e9;
+    for (let i = 0; i <= P0.len; i++) {
+      const d = Math.hypot(P0.xs[i]-680, P0.ys[i]-320);
+      if (d < bd) { bd = d; best = i; }
+    }
+    this.counterS = best;
+    this.rates();
+    this.reset();
+  }
+
+  rates() {
+    const c = this.cfg, R1 = c.len === 'long' ? 2 : 1;
+    this.R = c.conn === 'series' ? 2*R1 : c.conn === 'parallel' ? R1/2 : R1;
+    this.I = K * state.volt / this.R;
+    const br = c.conn === 'parallel' ? this.I/2 : this.I;
+    this.vroad = Math.min(320, 50 + 12*this.I);
+    for (const t of this.tunnels) { t.rate = br; t.vt = br * SP; }
+  }
+
+  reset() {
+    this.time = 0; this.ctimes = []; this.alt = 0;
+    for (const t of this.tunnels) { t.acc = 1; t.times = []; }
+    const P0 = this.paths[0], per = Math.ceil(N_CARS/5);
+    this.cars = [];
+    for (let i = 0; i < N_CARS; i++) {
+      const lane = i % 5, s = 20 + Math.floor(i/5) * (P0.len - 40) / per;
+      this.cars.push({ p: 0, s, lane, off: LOFF[lane], v: 0, tun: null, res: null,
+        nb: this.chooseBranch(), col: COLORS[i % COLORS.length] });
+    }
+    // 처음부터 안정된 흐름을 보여주도록 미리 40초 돌려 둠
+    if (state.ready) for (let i = 0; i < 1200; i++) this.step(1/30);
+    this.time = 0; this.ctimes = [];
+    for (const t of this.tunnels) t.times = [];
+  }
+
+  chooseBranch() {
+    if (this.paths.length === 2) return 1;
+    this.alt ^= 1;
+    return 1 + this.alt;
+  }
+
+  next(c) { return c.p === 0 ? c.nb : 0; }
+
+  // 앞에 있는 가장 가까운 터널과 그 입구까지의 거리
+  tunnelAhead(c) {
+    let best = null, bd = Infinity;
+    for (const t of this.tunnels) {
+      if (t.p === c.p && t.s0 > c.s && t.s0 - c.s < bd) { bd = t.s0 - c.s; best = t; }
+    }
+    if (best) return [best, bd];
+    const np = this.next(c), L = this.paths[c.p].len;
+    for (const t of this.tunnels) {
+      if (t.p === np && L - c.s + t.s0 < bd) { bd = L - c.s + t.s0; best = t; }
+    }
+    return [best, bd];
+  }
+
+  compat(c, d) {
+    const dq = d.tun || d.res;
+    if (c.tun) return !!dq;
+    if (c.res) return !!dq || d.lane === c.lane;
+    return !d.tun && d.lane === c.lane;
+  }
+
+  pickLane(p, s, self) {
+    let bestL = 2, bestM = -1;
+    for (let l = 0; l < 5; l++) {
+      let m = 1e9;
+      for (const d of this.cars) {
+        if (d === self || d.p !== p || d.tun || d.lane !== l) continue;
+        m = Math.min(m, Math.abs(d.s - s));
+      }
+      if (m > bestM + 0.5 || (Math.abs(m - bestM) <= 0.5 && Math.abs(l-2) < Math.abs(bestL-2))) { bestM = m; bestL = l; }
+    }
+    return bestL;
+  }
+
+  step(dt) {
+    this.time += dt;
+    const cars = this.cars;
+    // 1) 속력 결정 (앞차 / 터널 입구 정지선)
+    for (const c of cars) {
+      const L = this.paths[c.p].len, np = this.next(c);
+      let gap = Infinity;
+      for (const d of cars) {
+        if (d === c || !this.compat(c, d)) continue;
+        let dist;
+        if (d.p === c.p) { if (d.s <= c.s) continue; dist = d.s - c.s; }
+        else if (d.p === np && L - c.s < 220) dist = L - c.s + d.s;
+        else continue;
+        if (dist - CARL < gap) gap = dist - CARL;
+      }
+      if (!c.tun && !c.res) {
+        const [t, d] = this.tunnelAhead(c);
+        if (t) gap = Math.min(gap, d - 8);
+      }
+      if (c.tun || c.res) {
+        // 터널 차로: 입장 허가를 받으면 터널 속력으로 한 줄로 이동
+        c.v = Math.min((c.tun || c.res).vt, Math.max(0, gap * 25));
+        continue;
+      }
+      const target = Math.min(this.vroad, Math.max(0, gap * 5));
+      c.v = target < c.v ? target : Math.min(target, c.v + ACC*dt);
+    }
+    // 2) 이동
+    for (const c of cars) {
+      const prev = c.s, wasP = c.p;
+      c.s += c.v * dt;
+      if (c.res && !c.tun && c.p === c.res.p && c.s >= c.res.s0) { c.tun = c.res; c.v = Math.min(c.v, c.tun.vt); }
+      if (c.tun && c.s >= c.tun.s1) { c.tun = null; c.res = null; c.lane = this.pickLane(c.p, c.s, c); }
+      const L = this.paths[c.p].len;
+      if (c.s >= L) {
+        c.s -= L; c.p = this.next(c);
+        if (c.p === 0) {
+          c.nb = this.chooseBranch();
+          if (this.paths.length > 2 || cars.some(d => d !== c && d.p === 0 && d.lane === c.lane && Math.abs(d.s - c.s) < CARL))
+            c.lane = this.pickLane(0, c.s, c);
+        }
+      }
+      if (wasP === 0 && c.p === 0 && prev < this.counterS && c.s >= this.counterS) this.ctimes.push(this.time);
+      const tgt = (c.tun || c.res) ? 0 : LOFF[c.lane];
+      c.off += (tgt - c.off) * Math.min(1, dt * 7);
+    }
+    // 3) 터널 입구: 1초에 rate 대씩만 들여보냄
+    for (const t of this.tunnels) {
+      t.acc = Math.min(1, t.acc + t.rate * dt);
+      if (t.acc < 1 || cars.some(c => c.res === t && !c.tun)) continue;
+      let pick = null, pd = 12;
+      for (const c of cars) {
+        if (c.tun || c.res) continue;
+        const [tt, d] = this.tunnelAhead(c);
+        if (tt !== t || d >= pd) continue;
+        pick = c; pd = d;
+      }
+      if (pick) { pick.res = t; t.acc -= 1; t.times.push(this.time); }
+    }
+    const cut = this.time - 5;
+    while (this.ctimes.length && this.ctimes[0] < cut) this.ctimes.shift();
+    for (const t of this.tunnels) while (t.times.length && t.times[0] < cut) t.times.shift();
+  }
+
+  measured(times) {
+    const span = Math.min(5, this.time);
+    return span < 0.5 ? 0 : times.length / span;
+  }
+
+  resize() {
+    const w = this.canvas.clientWidth || 860, dpr = window.devicePixelRatio || 1;
+    const sc = w / W;
+    this.canvas.width = Math.round(w * dpr);
+    this.canvas.height = Math.round(H * sc * dpr);
+    this.canvas.style.height = (H * sc) + 'px';
+    this.ctx.setTransform(dpr*sc, 0, 0, dpr*sc, 0, 0);
+  }
+
+  draw() {
+    const ctx = this.ctx;
+    ctx.fillStyle = '#d8ecd0';
+    ctx.fillRect(0, 0, W, H);
+    ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    // 도로
+    ctx.setLineDash([]);
+    ctx.strokeStyle = '#f7f7f2'; ctx.lineWidth = 44;
+    for (const p of this.paths) strokeAlong(ctx, p, 0, p.len, 0);
+    ctx.strokeStyle = '#454b55'; ctx.lineWidth = 40;
+    for (const p of this.paths) strokeAlong(ctx, p, 0, p.len, 0);
+    ctx.lineCap = 'butt';
+    ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 1; ctx.setLineDash([7, 8]);
+    for (const p of this.paths) for (const o of [-10.5, -3.5, 3.5, 10.5]) strokeAlong(ctx, p, 12, p.len - 12, o);
+    ctx.setLineDash([]);
+    // 터널
+    for (const t of this.tunnels) {
+      const p = this.paths[t.p];
+      ctx.strokeStyle = '#8a6a4f'; ctx.lineWidth = 48; strokeAlong(ctx, p, t.s0, t.s1, 0);
+      ctx.strokeStyle = '#6d5039'; ctx.lineWidth = 2;
+      strokeAlong(ctx, p, t.s0, t.s1, -20); strokeAlong(ctx, p, t.s0, t.s1, 20);
+      ctx.strokeStyle = '#2a2a2e'; ctx.lineWidth = 11; strokeAlong(ctx, p, t.s0, t.s1, 0);
+      for (const s of [t.s0, t.s1]) {
+        const [x1, y1] = pt(p, s, -24), [x2, y2] = pt(p, s, 24);
+        ctx.strokeStyle = '#4e3826'; ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+      }
+      let [mx, my] = pt(p, (t.s0 + t.s1)/2, -42);
+      if (my < 30) [mx, my] = pt(p, (t.s0 + t.s1)/2, 46);   // 위쪽 가지는 글자를 터널 아래에
+      ctx.fillStyle = '#4e3826'; ctx.textAlign = 'center';
+      ctx.font = '700 13px "Noto Sans KR", sans-serif';
+      ctx.fillText(`${this.cfg.len === 'long' ? '긴' : '짧은'} 니크롬선`, mx, my - 6);
+      ctx.font = '12px "Noto Sans KR", sans-serif';
+      ctx.fillText(`1차선 터널 · ${this.measured(t.times).toFixed(1)}대/초`, mx, my + 9);
+    }
+    // 계수기(전류계)
+    const P0 = this.paths[0];
+    const [g1x, g1y] = pt(P0, this.counterS, -22), [g2x, g2y] = pt(P0, this.counterS, 22);
+    ctx.strokeStyle = '#ffd60a'; ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.moveTo(g1x, g1y); ctx.lineTo(g2x, g2y); ctx.stroke();
+    ctx.fillStyle = '#1d2433'; ctx.textAlign = 'center';
+    ctx.font = '700 13px "Noto Sans KR", sans-serif';
+    ctx.fillText('⏱ 계수기 = 전류계', 680, 358);
+    // 전지
+    const bx = 250, by = 356;
+    ctx.strokeStyle = '#1d2433';
+    ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx, by-14); ctx.lineTo(bx, by+6); ctx.stroke();
+    ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(bx+10, by-9); ctx.lineTo(bx+10, by+1); ctx.stroke();
+    ctx.font = '700 12px "Noto Sans KR", sans-serif';
+    ctx.fillText('+', bx - 9, by - 4); ctx.fillText('−', bx + 20, by - 4);
+    ctx.textAlign = 'left'; ctx.font = '700 13px "Noto Sans KR", sans-serif';
+    ctx.fillText(`전지 ×${state.volt} (차를 밀어주는 힘)`, bx + 32, by);
+    ctx.font = '600 13px "Noto Sans KR", sans-serif'; ctx.fillStyle = '#2d4a2b';
+    ctx.fillText('🛣 전선 = 5차선 도로', 80, 258);
+    ctx.font = '12px "Noto Sans KR", sans-serif';
+    ctx.fillText('차의 진행 방향 = 전류의 방향 (시계 방향)', 80, 278);
+    // 자동차
+    for (const c of this.cars) {
+      const [x, y, a] = pt(this.paths[c.p], c.s, c.off);
+      ctx.save(); ctx.translate(x, y); ctx.rotate(a);
+      ctx.fillStyle = c.col; ctx.fillRect(-5, -2.8, 10, 5.6);
+      ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fillRect(1.5, -2, 2, 4);
+      ctx.restore();
+    }
+  }
+
+  updateStats() {
+    const I = this.measured(this.ctimes);
+    this.out.i.textContent = `${I.toFixed(1)} 대/초`;
+    this.barEl.style.width = Math.min(100, I / 24 * 100) + '%';
+    this.out.r.textContent = this.R.toString();
+    const avg = this.cars.reduce((a, c) => a + c.v, 0) / this.cars.length;
+    this.out.v.textContent = `${Math.round(avg * 0.5)} km/h`;
+    this.out.j.textContent = `${this.cars.filter(c => !c.tun && c.v < 12).length}대`;
+  }
+}
+
+// ---------- 화면 구성 ----------
+const sims = { len: [], conn: [], free: [] };
+const host = id => document.getElementById(id);
+sims.len.push(new Sim(host('lenPanels'), '짧은 니크롬선 <small>짧은 1차선 터널</small>', { conn: 'single', len: 'short' }));
+sims.len.push(new Sim(host('lenPanels'), '긴 니크롬선 <small>긴 1차선 터널 (길이 2배)</small>', { conn: 'single', len: 'long' }));
+sims.conn.push(new Sim(host('connPanels'), '직렬연결 <small>터널 두 개가 한 줄로</small>', { conn: 'series', len: 'short' }));
+sims.conn.push(new Sim(host('connPanels'), '기준: 터널 1개', { conn: 'single', len: 'short' }));
+sims.conn.push(new Sim(host('connPanels'), '병렬연결 <small>터널 두 개가 나란히 두 줄로</small>', { conn: 'parallel', len: 'short' }));
+const free = new Sim(host('freePanels'), '', { conn: 'single', len: 'short' });
+sims.free.push(free);
+const CONN_NAME = { single: '터널 1개', series: '직렬연결', parallel: '병렬연결' };
+function freeTitle() {
+  free.setTitle(`${CONN_NAME[free.cfg.conn]} <small>${free.cfg.len === 'long' ? '긴' : '짧은'} 니크롬선</small>`);
+}
+freeTitle();
+state.ready = true;               // 이제부터 reset 때 미리 돌려 두기
+sims.len.forEach(s => s.reset());
+
+function seg(id, fn) {
+  const box = host(id);
+  box.addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    box.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+    fn(b.dataset.v);
+  });
+}
+seg('volt', v => { state.volt = +v; for (const k in sims) sims[k].forEach(s => s.rates()); });
+seg('speed', v => state.speed = +v);
+seg('fConn', v => { free.cfg.conn = v; free.build(); freeTitle(); });
+seg('fLen', v => { free.cfg.len = v; free.build(); freeTitle(); });
+host('pause').onclick = () => {
+  state.paused = !state.paused;
+  host('pause').textContent = state.paused ? '▶ 다시 재생' : '⏸ 일시정지';
+};
+host('reset').onclick = () => sims[state.tab].forEach(s => s.reset());
+host('tabs').addEventListener('click', e => {
+  const b = e.target.closest('.tab'); if (!b) return;
+  state.tab = b.dataset.tab;
+  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('[data-sec]').forEach(s => s.hidden = s.dataset.sec !== state.tab);
+  sims[state.tab].forEach(s => { s.resize(); s.reset(); });
+});
+window.addEventListener('resize', () => sims[state.tab].forEach(s => s.resize()));
+
+let last = performance.now(), statT = 0;
+function loop(now) {
+  const real = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  const active = sims[state.tab];
+  if (!state.paused) {
+    let dt = real * state.speed;
+    while (dt > 1e-4) {
+      const h = Math.min(dt, 1/60);
+      active.forEach(s => s.step(h));
+      dt -= h;
+    }
+  }
+  active.forEach(s => s.draw());
+  statT += real;
+  if (statT > 0.3) { statT = 0; active.forEach(s => s.updateStats()); }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>

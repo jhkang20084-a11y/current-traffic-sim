@@ -35,14 +35,19 @@
   .panel h3 small{color:var(--muted);font-weight:400;font-size:.88rem;margin-left:6px}
   .pctl{display:flex;flex-wrap:wrap;gap:8px 22px;align-items:center;margin:0 4px 10px}
   .pctl .item{display:flex;align-items:center;gap:8px}
-  .pctl input[type=range]{width:150px;accent-color:var(--accent)}
+  .pctl input[type=range]{width:120px;accent-color:var(--accent)}
   .pctl output{min-width:62px;font-weight:700;color:var(--accent);font-size:.92rem}
   .stepper{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:10px;overflow:hidden}
   .stepper button{border:0;background:var(--bg);color:var(--ink);width:34px;height:32px;font-size:1.1rem;cursor:pointer}
   .stepper button:disabled{opacity:.35;cursor:default}
   .stepper span{min-width:44px;text-align:center;font-weight:800}
   canvas{display:block;width:100%;border-radius:10px}
-  .stats{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-top:10px}
+  .wrap{max-width:1400px}
+  .duo{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
+  .duo .panel{margin-bottom:12px}
+  @media (max-width:860px){ .duo{grid-template-columns:1fr} }
+  .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:10px}
+  .stat.big{grid-column:1/-1}
   .stat{background:var(--bg);border-radius:10px;padding:8px 10px}
   .stat .k{font-size:.78rem;color:var(--muted)}
   .stat .v{font-size:1.15rem;font-weight:800}
@@ -71,10 +76,9 @@
   <h1>🚗⚡ 전류는 교통 흐름이다</h1>
   <p class="sub">자동차 = 전하, 1초 동안 계수기를 지나가는 자동차 수 = 전류. 전선은 넓은 5차선 도로, 니크롬선(저항)은 좁은 터널입니다.</p>
 
-  <div class="tabs" id="tabs">
-    <button class="tab on" data-tab="len">① 니크롬선 길이·굵기</button>
-    <button class="tab" data-tab="conn">② 직렬 vs 병렬</button>
-    <button class="tab" data-tab="free">③ 자유 실험</button>
+  <div class="controls">
+    <span><label>예시</label>
+      <span class="seg" id="preset"><button data-v="len" class="on">길이 비교</button><button data-v="width">넓이(굵기) 비교</button><button data-v="conn">직렬 vs 병렬</button><button data-v="count">병렬 개수 비교</button></span></span>
   </div>
 
   <div class="controls">
@@ -86,26 +90,14 @@
     <button class="btn" id="reset">↺ 처음부터</button>
   </div>
 
-  <section data-sec="len">
-    <div id="lenPanels"></div>
-    <div class="explain">
+  <div class="duo" id="panels"></div>
+  <div class="explain">
       <b>터널이 길수록</b> 차들이 좁은 터널을 빠져나가는 데 오래 걸려 입구 정체가 심해지고, 1초 동안 지나가는 차의 수(전류)가 줄어듭니다. → 저항은 <b>길이에 비례</b>.<br>
-      <b>터널이 넓을수록</b>(차로 수가 많을수록) 여러 줄로 동시에 지나갈 수 있어 정체가 줄고 전류가 커집니다. → 저항은 <b>단면적(굵기)에 반비례</b>.
-    </div>
-  </section>
-
-  <section data-sec="conn" hidden>
-    <div id="connPanels"></div>
-    <div class="explain">
+      <b>터널이 넓을수록</b>(차로 수가 많을수록) 여러 줄로 동시에 지나갈 수 있어 정체가 줄고 전류가 커집니다. → 저항은 <b>단면적(굵기)에 반비례</b>.<br>
       <b>직렬 = 터널이 한 줄로 이어짐.</b> 터널 개수가 늘수록 모든 차가 더 많은 터널을 지나야 하므로 정체가 심해지고 전류가 작아집니다 (전체 저항 ↑).<br>
       <b>병렬 = 터널이 여러 줄로 나란히.</b> 터널 개수가 늘수록 차들이 여러 갈래로 나누어 지나가므로 정체가 줄고 전류가 커집니다 (전체 저항 ↓).
       병렬에서 각 터널을 지나는 차의 수를 모두 더하면 계수기(전류계)에서 센 값과 같습니다.
-    </div>
-  </section>
-
-  <section data-sec="free" hidden>
-    <div id="freePanels"></div>
-  </section>
+  </div>
 
   <h2>🔁 비유 정리</h2>
   <table>
@@ -224,14 +216,23 @@ class Sim {
     this.build();
   }
 
+  // 예시 버튼으로 설정을 한꺼번에 바꿀 때
+  setCfg(cfg) {
+    Object.assign(this.cfg, cfg);
+    if (cfg.name !== undefined) this.name = cfg.name;
+    this.syncers.forEach(f => f());
+    this.build();
+  }
+
   makeControls(box, ctl) {
     const c = this.cfg;
+    this.syncers = [];
     const add = html => { const d = document.createElement('div'); d.className = 'item'; d.innerHTML = html; box.appendChild(d); return d; };
     if (ctl.includes('conn')) {
       const d = add(`<label>연결</label><span class="seg"><button data-v="series">직렬</button><button data-v="parallel">병렬</button></span>`);
       const btns = d.querySelectorAll('button');
       const mark = () => btns.forEach(b => b.classList.toggle('on', b.dataset.v === c.conn));
-      mark();
+      mark(); this.syncers.push(mark);
       d.addEventListener('click', e => {
         const b = e.target.closest('button'); if (!b) return;
         c.conn = b.dataset.v; mark(); this.build();
@@ -241,7 +242,7 @@ class Sim {
       const d = add(`<label>터널 개수</label><span class="stepper"><button data-d="-1">−</button><span></span><button data-d="1">+</button></span>`);
       const num = d.querySelector('.stepper span'), [minus, plus] = d.querySelectorAll('button');
       const show = () => { num.textContent = c.n + '개'; minus.disabled = c.n <= 1; plus.disabled = c.n >= 4; };
-      show();
+      show(); this.syncers.push(show);
       d.addEventListener('click', e => {
         const b = e.target.closest('button'); if (!b || b.disabled) return;
         c.n = Math.max(1, Math.min(4, c.n + +b.dataset.d)); show(); this.build();
@@ -251,6 +252,7 @@ class Sim {
       const d = add(`<label>${label}</label><input type="range" min="${min}" max="${max}" step="${step}" value="${c[key]}"><output></output>`);
       const inp = d.querySelector('input'), o = d.querySelector('output');
       o.textContent = fmt(c[key]);
+      this.syncers.push(() => { inp.value = c[key]; o.textContent = fmt(c[key]); });
       inp.addEventListener('input', () => { o.textContent = fmt(+inp.value); });
       inp.addEventListener('change', () => { c[key] = +inp.value; this.build(); });
     };
@@ -261,7 +263,7 @@ class Sim {
   updateTitle() {
     const c = this.cfg;
     const kind = c.n === 1 ? '터널 1개' : (c.conn === 'series' ? `직렬연결 · 터널 ${c.n}개` : `병렬연결 · 터널 ${c.n}개`);
-    this.titleEl.innerHTML = `${this.name ? this.name + ' — ' : ''}${kind} <small>길이 ${cm(c.len)} cm · 넓이 ${c.w}차선</small>`;
+    this.titleEl.innerHTML = `${this.name ? '화면 ' + this.name + ' — ' : ''}${kind} <small>길이 ${cm(c.len)} cm · 넓이 ${c.w}차선</small>`;
   }
 
   build() {
@@ -495,7 +497,7 @@ class Sim {
       // 병렬 가지는 글자를 터널 아래에, 나머지는 위에
       const [mx, my] = pt(p, (t.s0 + t.s1)/2, this.paths.length > 2 ? 40 : -34);
       ctx.fillStyle = '#4e3826'; ctx.textAlign = 'center';
-      ctx.font = `700 ${t.s1 - t.s0 < 90 ? 11 : 12}px "Noto Sans KR", sans-serif`;
+      ctx.font = `700 ${t.s1 - t.s0 < 90 ? 16 : 19}px "Noto Sans KR", sans-serif`;
       ctx.fillText(`${this.measured(t.times).toFixed(1)}대/초`, mx, my);
     }
     // 계수기(전류계)
@@ -504,21 +506,21 @@ class Sim {
     ctx.strokeStyle = '#ffd60a'; ctx.lineWidth = 4;
     ctx.beginPath(); ctx.moveTo(g1x, g1y); ctx.lineTo(g2x, g2y); ctx.stroke();
     ctx.fillStyle = '#1d2433'; ctx.textAlign = 'center';
-    ctx.font = '700 13px "Noto Sans KR", sans-serif';
-    ctx.fillText('⏱ 계수기 = 전류계', 680, B + 38);
+    ctx.font = '700 19px "Noto Sans KR", sans-serif';
+    ctx.fillText('⏱ 계수기 = 전류계', 690, B + 40);
     // 전지
-    const bx = 250, by = B + 36;
+    const bx = 120, by = B + 38;
     ctx.strokeStyle = '#1d2433';
     ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(bx, by-14); ctx.lineTo(bx, by+6); ctx.stroke();
     ctx.lineWidth = 5; ctx.beginPath(); ctx.moveTo(bx+10, by-9); ctx.lineTo(bx+10, by+1); ctx.stroke();
     ctx.font = '700 12px "Noto Sans KR", sans-serif';
     ctx.fillText('+', bx - 9, by - 4); ctx.fillText('−', bx + 20, by - 4);
-    ctx.textAlign = 'left'; ctx.font = '700 13px "Noto Sans KR", sans-serif';
-    ctx.fillText(`전지 ×${state.volt} (차를 밀어주는 힘)`, bx + 32, by);
-    ctx.font = '600 13px "Noto Sans KR", sans-serif'; ctx.fillStyle = '#2d4a2b';
-    ctx.fillText('🛣 전선 = 5차선 도로   🟫 니크롬선 = 좁은 터널', 80, B - 62);
-    ctx.font = '12px "Noto Sans KR", sans-serif';
-    ctx.fillText('차의 진행 방향 = 전류의 방향 (시계 방향)', 80, B - 42);
+    ctx.textAlign = 'left'; ctx.font = '700 19px "Noto Sans KR", sans-serif';
+    ctx.fillText(`전지 ×${state.volt} (차를 밀어주는 힘)`, bx + 32, by + 2);
+    ctx.font = '600 18px "Noto Sans KR", sans-serif'; ctx.fillStyle = '#2d4a2b';
+    ctx.fillText('🛣 전선 = 5차선 도로   🟫 니크롬선 = 좁은 터널', 80, B - 66);
+    ctx.font = '16px "Noto Sans KR", sans-serif';
+    ctx.fillText('차의 진행 방향 = 전류의 방향 (시계 방향)', 80, B - 40);
     // 자동차
     for (const c of this.cars) {
       const [x, y, a] = pt(this.paths[c.p], c.s, c.off);
@@ -541,16 +543,19 @@ class Sim {
 }
 
 // ---------- 화면 구성 ----------
-const sims = { len: [], conn: [], free: [] };
 const host = id => document.getElementById(id);
 const base = { conn: 'series', n: 1, len: 100, w: 1 };
-sims.len.push(new Sim(host('lenPanels'), { ...base }, ['len', 'width'], '터널 A'));
-sims.len.push(new Sim(host('lenPanels'), { ...base, len: 200 }, ['len', 'width'], '터널 B'));
-sims.conn.push(new Sim(host('connPanels'), { ...base, n: 2 }, ['count', 'len', 'width']));
-sims.conn.push(new Sim(host('connPanels'), { ...base, conn: 'parallel', n: 2 }, ['count', 'len', 'width']));
-sims.free.push(new Sim(host('freePanels'), { ...base, n: 2 }, ['conn', 'count', 'len', 'width']));
+// 예시 버튼: 왼쪽(A)·오른쪽(B) 화면 설정
+const PRESETS = {
+  len:   [{ ...base, name: 'A' }, { ...base, len: 200, name: 'B' }],
+  width: [{ ...base, len: 200, name: 'A' }, { ...base, len: 200, w: 2, name: 'B' }],
+  conn:  [{ ...base, n: 2, name: 'A' }, { ...base, conn: 'parallel', n: 2, name: 'B' }],
+  count: [{ ...base, conn: 'parallel', n: 2, name: 'A' }, { ...base, conn: 'parallel', n: 4, name: 'B' }],
+};
+const CTL = ['conn', 'count', 'len', 'width'];
+const sims = PRESETS.len.map(p => new Sim(host('panels'), p, CTL, p.name));
 state.ready = true;               // 이제부터 reset 때 미리 돌려 두기
-sims.len.forEach(s => s.reset());
+sims.forEach(s => s.reset());
 
 function seg(id, fn) {
   const box = host(id);
@@ -560,27 +565,21 @@ function seg(id, fn) {
     fn(b.dataset.v);
   });
 }
-seg('volt', v => { state.volt = +v; for (const k in sims) sims[k].forEach(s => s.rates()); });
+seg('preset', v => PRESETS[v].forEach((p, i) => sims[i].setCfg(p)));
+seg('volt', v => { state.volt = +v; sims.forEach(s => s.rates()); });
 seg('speed', v => state.speed = +v);
 host('pause').onclick = () => {
   state.paused = !state.paused;
   host('pause').textContent = state.paused ? '▶ 다시 재생' : '⏸ 일시정지';
 };
-host('reset').onclick = () => sims[state.tab].forEach(s => s.reset());
-host('tabs').addEventListener('click', e => {
-  const b = e.target.closest('.tab'); if (!b) return;
-  state.tab = b.dataset.tab;
-  document.querySelectorAll('.tab').forEach(x => x.classList.toggle('on', x === b));
-  document.querySelectorAll('[data-sec]').forEach(s => s.hidden = s.dataset.sec !== state.tab);
-  sims[state.tab].forEach(s => { s.resize(); s.reset(); });
-});
-window.addEventListener('resize', () => sims[state.tab].forEach(s => s.resize()));
+host('reset').onclick = () => sims.forEach(s => s.reset());
+window.addEventListener('resize', () => sims.forEach(s => s.resize()));
 
 let last = performance.now(), statT = 0;
 function loop(now) {
   const real = Math.min(0.05, (now - last) / 1000);
   last = now;
-  const active = sims[state.tab];
+  const active = sims;
   if (!state.paused) {
     let dt = real * state.speed;
     while (dt > 1e-4) {
